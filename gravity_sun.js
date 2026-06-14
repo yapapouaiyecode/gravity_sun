@@ -1,30 +1,8 @@
-// gravity_ball.js
-// Gravity Ball faite avec de vrais pixels + Ctrl clic gauche pour régler la gravité
+// gravity_ball_fixed.js
+// Gravity Ball avec vrais pixels + Ctrl clic gauche fiable
 
 (function () {
     "use strict";
-
-    let ctrlDown = false;
-
-    document.addEventListener("keydown", function (e) {
-        if (e.key === "Control") ctrlDown = true;
-    });
-
-    document.addEventListener("keyup", function (e) {
-        if (e.key === "Control") ctrlDown = false;
-    });
-
-    document.addEventListener("mousedown", function (e) {
-        ctrlDown = e.ctrlKey;
-    }, true);
-
-    document.addEventListener("mouseup", function (e) {
-        ctrlDown = e.ctrlKey;
-    }, true);
-
-    window.addEventListener("blur", function () {
-        ctrlDown = false;
-    });
 
     function clamp(value, min, max) {
         return Math.max(min, Math.min(max, value));
@@ -36,7 +14,6 @@
         return 0;
     }
 
-    // Vraie boule pixel-art 7x7
     const BALL_ART = [
         "..111..",
         ".12221.",
@@ -69,7 +46,6 @@
 
                 if (outOfBounds(x, y)) continue;
 
-                // Centre de la boule = vrai pixel qui contrôle la gravité
                 if (x === corePixel.x && y === corePixel.y) {
                     corePixel.color = BALL_COLORS[char];
                     continue;
@@ -82,8 +58,6 @@
 
                     if (p) {
                         p.color = BALL_COLORS[char];
-                        p.gravityCoreX = corePixel.x;
-                        p.gravityCoreY = corePixel.y;
                     }
                 }
             }
@@ -91,6 +65,12 @@
     }
 
     function findGravityCore(pixel) {
+        if (!pixel) return null;
+
+        if (pixel.element === "gravity_ball") {
+            return pixel;
+        }
+
         for (let dx = -4; dx <= 4; dx++) {
             for (let dy = -4; dy <= 4; dy++) {
                 const x = pixel.x + dx;
@@ -110,6 +90,8 @@
     }
 
     function openGravityPopup(corePixel) {
+        if (!corePixel) return;
+
         const current = corePixel.gravityPower || 30;
 
         promptInput(
@@ -218,7 +200,7 @@
         name: "Gravity Ball",
         color: "#56598a",
         behavior: behaviors.WALL,
-        category: "Gravity Ball",
+        category: "Statique",
         state: "solid",
         density: 999999,
         hardness: 1,
@@ -237,35 +219,53 @@
             applyGravity(pixel);
         },
 
-        onClicked: function (pixel) {
-            if (ctrlDown) {
-                openGravityPopup(pixel);
-            }
-        },
-
-        desc: "Vraie boule de gravité faite avec plusieurs pixels. Ctrl + clic gauche pour régler la puissance."
+        desc: "Gravity Ball faite avec de vrais pixels. Ctrl + clic gauche dessus pour régler la gravité."
     };
 
     elements.gravity_ball_pixel = {
         name: "Gravity Ball Pixel",
         color: "#2c2d44",
         behavior: behaviors.WALL,
-        category: "Gravity Ball",
+        category: "Statique",
         hidden: true,
         state: "solid",
         density: 999999,
         hardness: 1,
-        movable: false,
+        movable: false
+    };
 
-        onClicked: function (pixel) {
-            if (!ctrlDown) return;
+    // Détection fiable du Ctrl + clic gauche
+    document.addEventListener("mousedown", function (event) {
+        if (!event.ctrlKey) return;
+        if (event.button !== 0) return;
 
-            const core = findGravityCore(pixel);
+        if (typeof mousePos === "undefined") return;
+        if (!mousePos) return;
+
+        const x = mousePos.x;
+        const y = mousePos.y;
+
+        if (outOfBounds(x, y)) return;
+
+        const clickedPixel = pixelMap[x][y];
+
+        if (!clickedPixel) return;
+
+        if (
+            clickedPixel.element === "gravity_ball" ||
+            clickedPixel.element === "gravity_ball_pixel"
+        ) {
+            event.preventDefault();
+            event.stopPropagation();
+
+            const core = findGravityCore(clickedPixel);
 
             if (core) {
                 openGravityPopup(core);
             }
         }
-    };
+    }, true);
+
+    logMessage("Gravity Ball mod chargé.");
 
 })();
