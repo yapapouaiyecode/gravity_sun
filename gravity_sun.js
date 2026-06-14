@@ -1,59 +1,27 @@
-// gravity_sun.js
-// Mod Sandboxels : soleils gravitationnels
-// Place un soleil, puis tous les pixels proches sont attirés vers lui.
+// gravity_number_pixel.js
+// Sandboxels : pixel de gravité réglable avec Ctrl + clic gauche
 
 (function () {
     "use strict";
 
-    const MODES = {
-        faible: {
-            radius: 18,
-            chance: 0.35,
-            heat: 0.05,
-            color: "#ffd36a"
-        },
-        normal: {
-            radius: 32,
-            chance: 0.55,
-            heat: 0.15,
-            color: "#ff9c2a"
-        },
-        fort: {
-            radius: 55,
-            chance: 0.8,
-            heat: 0.35,
-            color: "#ff4a00"
-        },
-        trou_noir: {
-            radius: 70,
-            chance: 1,
-            heat: 0,
-            consume: true,
-            color: "#1a082e"
-        },
-        repulsion: {
-            radius: 42,
-            chance: 0.7,
-            heat: 0,
-            repel: true,
-            color: "#69dbff"
+    // Sert à savoir si CTRL est appuyé
+    let ctrlDown = false;
+
+    document.addEventListener("keydown", function (e) {
+        if (e.key === "Control") {
+            ctrlDown = true;
         }
-    };
+    });
 
-    const MODE_ORDER = ["faible", "normal", "fort", "trou_noir", "repulsion"];
+    document.addEventListener("keyup", function (e) {
+        if (e.key === "Control") {
+            ctrlDown = false;
+        }
+    });
 
-    const GRAVITY_SUN_ELEMENTS = [
-        "weak_gravity_sun",
-        "gravity_sun",
-        "strong_gravity_sun",
-        "black_gravity_sun",
-        "white_gravity_sun",
-        "custom_gravity_sun"
-    ];
-
-    const IMMUNE = {};
-    GRAVITY_SUN_ELEMENTS.forEach(name => IMMUNE[name] = true);
-    IMMUNE.gravity_sun_picker = true;
+    window.addEventListener("blur", function () {
+        ctrlDown = false;
+    });
 
     function clamp(value, min, max) {
         return Math.max(min, Math.min(max, value));
@@ -65,236 +33,139 @@
         return 0;
     }
 
-    function getGravityMode(pixel) {
-        const elementData = elements[pixel.element];
-        const modeName = pixel.gravitySunMode || elementData.gravitySunMode || "normal";
-        return MODES[modeName] || MODES.normal;
-    }
+    function openGravityPopup(pixel) {
+        const currentValue = pixel.gravityPower || 30;
 
-    function canBePulled(pixel) {
-        if (!pixel) return false;
-        if (IMMUNE[pixel.element]) return false;
-        return true;
-    }
+        promptInput(
+            "Choisis la puissance de gravité.\n\nExemple :\n10 = faible\n30 = normal\n80 = très fort\n-30 = répulsion",
+            function (value) {
+                let number = parseFloat(value);
 
-    function movePixelTowardSun(sunPixel, targetPixel, config) {
-        const dx = sunPixel.x - targetPixel.x;
-        const dy = sunPixel.y - targetPixel.y;
-
-        if (dx === 0 && dy === 0) return;
-
-        // Le trou noir supprime les pixels très proches.
-        if (
-            config.consume &&
-            Math.abs(dx) <= 1 &&
-            Math.abs(dy) <= 1
-        ) {
-            deletePixel(targetPixel.x, targetPixel.y);
-            return;
-        }
-
-        let stepX = sign(dx);
-        let stepY = sign(dy);
-
-        // Mode répulsion : inverse la direction.
-        if (config.repel) {
-            stepX *= -1;
-            stepY *= -1;
-        }
-
-        const x = targetPixel.x;
-        const y = targetPixel.y;
-
-        const moves = [];
-
-        // Diagonale d'abord pour donner un effet plus naturel.
-        if (stepX !== 0 && stepY !== 0) {
-            moves.push([x + stepX, y + stepY]);
-        }
-
-        // Puis axe dominant.
-        if (Math.abs(dx) >= Math.abs(dy)) {
-            if (stepX !== 0) moves.push([x + stepX, y]);
-            if (stepY !== 0) moves.push([x, y + stepY]);
-        } else {
-            if (stepY !== 0) moves.push([x, y + stepY]);
-            if (stepX !== 0) moves.push([x + stepX, y]);
-        }
-
-        // Petit chaos pour éviter un mouvement trop robotique.
-        if (Math.random() < 0.12) {
-            moves.reverse();
-        }
-
-        for (const move of moves) {
-            const nx = move[0];
-            const ny = move[1];
-
-            if (outOfBounds(nx, ny)) continue;
-
-            if (isEmpty(nx, ny, false)) {
-                if (tryMove(targetPixel, nx, ny, undefined, true)) {
-                    if (typeof pixelTicks !== "undefined") {
-                        targetPixel._gravitySunTick = pixelTicks;
-                    }
+                if (isNaN(number)) {
+                    logMessage("Nombre invalide.");
                     return;
                 }
-            }
-        }
+
+                number = clamp(number, -200, 200);
+
+                pixel.gravityPower = number;
+
+                if (number > 0) {
+                    pixel.color = "#ff9c2a";
+                    logMessage("Gravité réglée sur : " + number);
+                } else if (number < 0) {
+                    pixel.color = "#69dbff";
+                    logMessage("Répulsion réglée sur : " + number);
+                } else {
+                    pixel.color = "#aaaaaa";
+                    logMessage("Gravité désactivée.");
+                }
+            },
+            "Réglage gravité",
+            String(currentValue)
+        );
     }
 
-    function applyGravity(sunPixel) {
-        const config = getGravityMode(sunPixel);
-        const radius = config.radius;
+    function applyGravity(pixel) {
+        const power = pixel.gravityPower || 30;
+
+        if (power === 0) return;
+
+        const radius = clamp(Math.abs(power), 1, 200);
         const radiusSq = radius * radius;
 
-        const minX = Math.max(0, sunPixel.x - radius);
-        const maxX = Math.min(width - 1, sunPixel.x + radius);
-        const minY = Math.max(0, sunPixel.y - radius);
-        const maxY = Math.min(height - 1, sunPixel.y + radius);
+        const minX = Math.max(0, pixel.x - radius);
+        const maxX = Math.min(width - 1, pixel.x + radius);
+        const minY = Math.max(0, pixel.y - radius);
+        const maxY = Math.min(height - 1, pixel.y + radius);
+
+        const repulse = power < 0;
 
         for (let x = minX; x <= maxX; x++) {
             for (let y = minY; y <= maxY; y++) {
-                const targetPixel = pixelMap[x][y];
+                const target = pixelMap[x][y];
 
-                if (!canBePulled(targetPixel)) continue;
+                if (!target) continue;
+                if (target === pixel) continue;
+                if (target.element === "gravity_number_pixel") continue;
 
-                if (
-                    typeof pixelTicks !== "undefined" &&
-                    targetPixel._gravitySunTick === pixelTicks
-                ) {
-                    continue;
-                }
+                const dx = pixel.x - target.x;
+                const dy = pixel.y - target.y;
 
-                const dx = sunPixel.x - x;
-                const dy = sunPixel.y - y;
                 const distSq = dx * dx + dy * dy;
 
                 if (distSq < 1 || distSq > radiusSq) continue;
 
                 const dist = Math.sqrt(distSq);
 
-                // Plus le pixel est proche, plus il est attiré.
-                const pullChance = clamp(
-                    config.chance * (1.15 - dist / (radius + 1)),
-                    0.02,
-                    1
-                );
+                // Plus c'est proche, plus ça attire fort
+                const chance = clamp(1 - dist / radius, 0.02, 1);
 
-                if (Math.random() < pullChance) {
-                    // Chauffe légère sauf répulsion/trou noir.
-                    if (config.heat && !config.repel) {
-                        targetPixel.temp = (targetPixel.temp || 20) +
-                            config.heat * clamp(1 - dist / radius, 0, 1);
+                if (Math.random() > chance) continue;
+
+                let moveX = sign(dx);
+                let moveY = sign(dy);
+
+                // Si le nombre est négatif, ça repousse
+                if (repulse) {
+                    moveX *= -1;
+                    moveY *= -1;
+                }
+
+                const possibleMoves = [];
+
+                if (moveX !== 0 && moveY !== 0) {
+                    possibleMoves.push([target.x + moveX, target.y + moveY]);
+                }
+
+                if (Math.abs(dx) >= Math.abs(dy)) {
+                    if (moveX !== 0) possibleMoves.push([target.x + moveX, target.y]);
+                    if (moveY !== 0) possibleMoves.push([target.x, target.y + moveY]);
+                } else {
+                    if (moveY !== 0) possibleMoves.push([target.x, target.y + moveY]);
+                    if (moveX !== 0) possibleMoves.push([target.x + moveX, target.y]);
+                }
+
+                for (const move of possibleMoves) {
+                    const nx = move[0];
+                    const ny = move[1];
+
+                    if (outOfBounds(nx, ny)) continue;
+
+                    if (isEmpty(nx, ny, false)) {
+                        tryMove(target, nx, ny, undefined, true);
+                        break;
                     }
-
-                    movePixelTowardSun(sunPixel, targetPixel, config);
                 }
             }
         }
     }
 
-    function addGravitySunElement(id, modeName, displayName, description) {
-        const config = MODES[modeName];
-
-        elements[id] = {
-            name: displayName,
-            color: [config.color, "#fff2a8", "#ffcf40"],
-            behavior: behaviors.WALL,
-            category: "special",
-            state: "solid",
-            density: 999999,
-            hardness: 1,
-            temp: 5000,
-            glow: true,
-            gravitySunMode: modeName,
-            tick: function (pixel) {
-                applyGravity(pixel);
-            },
-            desc: description
-        };
-    }
-
-    addGravitySunElement(
-        "weak_gravity_sun",
-        "faible",
-        "Soleil gravité faible",
-        "Petit soleil qui attire doucement les pixels proches."
-    );
-
-    addGravitySunElement(
-        "gravity_sun",
-        "normal",
-        "Soleil gravitationnel",
-        "Soleil qui attire les pixels autour de lui."
-    );
-
-    addGravitySunElement(
-        "strong_gravity_sun",
-        "fort",
-        "Soleil gravité forte",
-        "Soleil puissant qui attire beaucoup plus loin."
-    );
-
-    addGravitySunElement(
-        "black_gravity_sun",
-        "trou_noir",
-        "Soleil trou noir",
-        "Attire fortement les pixels et les absorbe quand ils sont trop proches."
-    );
-
-    addGravitySunElement(
-        "white_gravity_sun",
-        "repulsion",
-        "Soleil répulsif",
-        "Repousse les pixels au lieu de les attirer."
-    );
-
-    elements.custom_gravity_sun = {
-        name: "Soleil gravité custom",
-        color: ["#ff9c2a", "#fff2a8"],
+    elements.gravity_number_pixel = {
+        name: "Pixel gravité réglable",
+        color: "#ff9c2a",
         behavior: behaviors.WALL,
         category: "special",
         state: "solid",
         density: 999999,
         hardness: 1,
-        temp: 5000,
         glow: true,
-        onPlace: function (pixel) {
-            pixel.gravitySunMode = "normal";
+
+        properties: {
+            gravityPower: 30
         },
+
         tick: function (pixel) {
             applyGravity(pixel);
         },
-        desc: "Soleil personnalisable. Utilise l'outil Sélecteur gravité soleil dessus pour changer son mode."
-    };
 
-    elements.gravity_sun_picker = {
-        name: "Sélecteur gravité soleil",
-        color: "#7be7ff",
-        category: "tools",
-        tool: function (pixel) {
-            if (!pixel) return;
-            if (!GRAVITY_SUN_ELEMENTS.includes(pixel.element)) return;
-
-            const currentMode =
-                pixel.gravitySunMode ||
-                elements[pixel.element].gravitySunMode ||
-                "normal";
-
-            let index = MODE_ORDER.indexOf(currentMode);
-            if (index < 0) index = 1;
-
-            const nextMode = MODE_ORDER[(index + 1) % MODE_ORDER.length];
-
-            pixel.gravitySunMode = nextMode;
-            pixel.color = MODES[nextMode].color;
-
-            if (typeof logMessage === "function") {
-                logMessage("Mode du soleil : " + nextMode);
+        onClicked: function (pixel) {
+            if (ctrlDown) {
+                openGravityPopup(pixel);
             }
         },
-        desc: "Clique sur un soleil gravitationnel pour changer son mode : faible, normal, fort, trou noir, répulsion."
+
+        desc: "Place ce pixel, puis fais Ctrl + clic gauche dessus pour choisir un nombre de gravité. Positif = attire, négatif = repousse."
     };
 
 })();
