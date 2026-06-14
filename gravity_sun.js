@@ -1,5 +1,5 @@
-// gravity_pixel_art.js
-// Pixel de gravité style pixel-art + Ctrl clic gauche pour régler la gravité
+// gravity_ball.js
+// Gravity Ball faite avec de vrais pixels + Ctrl clic gauche pour régler la gravité
 
 (function () {
     "use strict";
@@ -36,54 +36,54 @@
         return 0;
     }
 
-    // Petit sprite pixel-art 7x7
-    // . = vide
-    // 1/2/3 = couleurs du carré
-    const GRAVITY_ART = [
-        ".......",
-        ".11111.",
+    // Vraie boule pixel-art 7x7
+    const BALL_ART = [
+        "..111..",
         ".12221.",
-        ".12321.",
+        "1233321",
+        "1234321",
+        "1233321",
         ".12221.",
-        ".11111.",
-        "......."
+        "..111.."
     ];
 
-    const ART_COLORS = {
-        "1": "#241a1a",
-        "2": "#38211e",
-        "3": "#4b2b24"
+    const BALL_COLORS = {
+        "1": "#1b1b28",
+        "2": "#2c2d44",
+        "3": "#3d3f63",
+        "4": "#56598a"
     };
 
-    function createPixelArtBlock(corePixel) {
-        const startX = corePixel.x - 3;
-        const startY = corePixel.y - 3;
+    function createGravityBall(corePixel) {
+        const size = BALL_ART.length;
+        const offset = Math.floor(size / 2);
 
-        for (let yy = 0; yy < GRAVITY_ART.length; yy++) {
-            for (let xx = 0; xx < GRAVITY_ART[yy].length; xx++) {
-                const char = GRAVITY_ART[yy][xx];
+        for (let yy = 0; yy < size; yy++) {
+            for (let xx = 0; xx < BALL_ART[yy].length; xx++) {
+                const char = BALL_ART[yy][xx];
 
                 if (char === ".") continue;
 
-                const x = startX + xx;
-                const y = startY + yy;
+                const x = corePixel.x + xx - offset;
+                const y = corePixel.y + yy - offset;
 
                 if (outOfBounds(x, y)) continue;
 
-                // Centre = vrai pixel de gravité
+                // Centre de la boule = vrai pixel qui contrôle la gravité
                 if (x === corePixel.x && y === corePixel.y) {
-                    corePixel.color = ART_COLORS[char];
+                    corePixel.color = BALL_COLORS[char];
                     continue;
                 }
 
                 if (isEmpty(x, y, false)) {
-                    createPixel("gravity_pixel_art_body", x, y);
+                    createPixel("gravity_ball_pixel", x, y);
 
-                    const newPixel = pixelMap[x][y];
-                    if (newPixel) {
-                        newPixel.color = ART_COLORS[char];
-                        newPixel.linkedGravityX = corePixel.x;
-                        newPixel.linkedGravityY = corePixel.y;
+                    const p = pixelMap[x][y];
+
+                    if (p) {
+                        p.color = BALL_COLORS[char];
+                        p.gravityCoreX = corePixel.x;
+                        p.gravityCoreY = corePixel.y;
                     }
                 }
             }
@@ -91,7 +91,6 @@
     }
 
     function findGravityCore(pixel) {
-        // Cherche le centre du bloc autour du pixel décoratif
         for (let dx = -4; dx <= 4; dx++) {
             for (let dy = -4; dy <= 4; dy++) {
                 const x = pixel.x + dx;
@@ -99,10 +98,10 @@
 
                 if (outOfBounds(x, y)) continue;
 
-                const nearby = pixelMap[x][y];
+                const p = pixelMap[x][y];
 
-                if (nearby && nearby.element === "gravity_pixel_art_core") {
-                    return nearby;
+                if (p && p.element === "gravity_ball") {
+                    return p;
                 }
             }
         }
@@ -110,11 +109,11 @@
         return null;
     }
 
-    function openGravityPopup(pixel) {
-        const currentValue = pixel.gravityPower || 30;
+    function openGravityPopup(corePixel) {
+        const current = corePixel.gravityPower || 30;
 
         promptInput(
-            "Choisis la puissance de gravité.\n\n10 = faible\n30 = normal\n80 = fort\n150 = énorme\n0 = désactivé\n-30 = répulsion",
+            "Puissance de la Gravity Ball :\n\n10 = faible\n30 = normal\n80 = fort\n150 = énorme\n0 = off\n-30 = répulsion",
             function (value) {
                 let number = parseFloat(value);
 
@@ -125,26 +124,26 @@
 
                 number = clamp(number, -200, 200);
 
-                pixel.gravityPower = number;
+                corePixel.gravityPower = number;
 
                 if (number > 0) {
-                    pixel.color = "#4b2b24";
-                    logMessage("Gravité : " + number);
+                    corePixel.color = "#56598a";
+                    logMessage("Gravity Ball attraction : " + number);
                 } else if (number < 0) {
-                    pixel.color = "#2f5b7a";
-                    logMessage("Répulsion : " + number);
+                    corePixel.color = "#4cc9f0";
+                    logMessage("Gravity Ball répulsion : " + number);
                 } else {
-                    pixel.color = "#555555";
-                    logMessage("Gravité désactivée.");
+                    corePixel.color = "#555555";
+                    logMessage("Gravity Ball désactivée.");
                 }
             },
-            "Réglage gravité",
-            String(currentValue)
+            "Gravity Ball",
+            String(current)
         );
     }
 
-    function applyGravity(pixel) {
-        const power = pixel.gravityPower || 30;
+    function applyGravity(corePixel) {
+        const power = corePixel.gravityPower || 30;
 
         if (power === 0) return;
 
@@ -152,29 +151,28 @@
         const radiusSq = radius * radius;
         const repulse = power < 0;
 
-        const minX = Math.max(0, pixel.x - radius);
-        const maxX = Math.min(width - 1, pixel.x + radius);
-        const minY = Math.max(0, pixel.y - radius);
-        const maxY = Math.min(height - 1, pixel.y + radius);
+        const minX = Math.max(0, corePixel.x - radius);
+        const maxX = Math.min(width - 1, corePixel.x + radius);
+        const minY = Math.max(0, corePixel.y - radius);
+        const maxY = Math.min(height - 1, corePixel.y + radius);
 
         for (let x = minX; x <= maxX; x++) {
             for (let y = minY; y <= maxY; y++) {
                 const target = pixelMap[x][y];
 
                 if (!target) continue;
-                if (target === pixel) continue;
-                if (target.element === "gravity_pixel_art_core") continue;
-                if (target.element === "gravity_pixel_art_body") continue;
+                if (target === corePixel) continue;
+                if (target.element === "gravity_ball") continue;
+                if (target.element === "gravity_ball_pixel") continue;
 
-                const dx = pixel.x - target.x;
-                const dy = pixel.y - target.y;
+                const dx = corePixel.x - target.x;
+                const dy = corePixel.y - target.y;
 
                 const distSq = dx * dx + dy * dy;
 
                 if (distSq < 1 || distSq > radiusSq) continue;
 
                 const dist = Math.sqrt(distSq);
-
                 const chance = clamp(1 - dist / radius, 0.02, 1);
 
                 if (Math.random() > chance) continue;
@@ -216,15 +214,15 @@
         }
     }
 
-    elements.gravity_pixel_art_core = {
-        name: "Bloc gravité pixel-art",
-        color: "#4b2b24",
+    elements.gravity_ball = {
+        name: "Gravity Ball",
+        color: "#56598a",
         behavior: behaviors.WALL,
-        category: "special",
+        category: "Gravity Ball",
         state: "solid",
         density: 999999,
         hardness: 1,
-        glow: false,
+        movable: false,
 
         properties: {
             gravityPower: 30
@@ -232,7 +230,7 @@
 
         onPlace: function (pixel) {
             pixel.gravityPower = 30;
-            createPixelArtBlock(pixel);
+            createGravityBall(pixel);
         },
 
         tick: function (pixel) {
@@ -245,14 +243,14 @@
             }
         },
 
-        desc: "Bloc de gravité style pixel-art. Fais Ctrl + clic gauche dessus pour choisir la gravité."
+        desc: "Vraie boule de gravité faite avec plusieurs pixels. Ctrl + clic gauche pour régler la puissance."
     };
 
-    elements.gravity_pixel_art_body = {
-        name: "Corps bloc gravité",
-        color: "#241a1a",
+    elements.gravity_ball_pixel = {
+        name: "Gravity Ball Pixel",
+        color: "#2c2d44",
         behavior: behaviors.WALL,
-        category: "special",
+        category: "Gravity Ball",
         hidden: true,
         state: "solid",
         density: 999999,
